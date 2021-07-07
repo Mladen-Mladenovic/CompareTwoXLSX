@@ -12,13 +12,32 @@
 '''
 
 
-import send2trash, openpyxl, pprint ,varDepo, logging
+import os, send2trash, openpyxl, pprint ,varDepo, re, logging
 from openpyxl.utils import get_column_letter
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.disable(level=logging.CRITICAL)
 
-# Loads xlsx document, requires doc address and sheet name, returnes workbook and worksheet as a tuple.
+# Find addresses for the two xlsx docs based on first part of their names which is always constant.
+def get_files_path():
+	absenceRe = re.compile('^Allowance.*') # Create a regex expression using fixed part of the doc name.
+	googleRe = re.compile('^HR.*')
+	workDir = os.path.dirname(__file__) # Find out the file directory path.
+	li = os.listdir(workDir) # Get list of names of the files in the file directory.
+	# Iter the file names to find the ones matching to the regex pattern.
+	for i in li:
+		if absenceRe.search(i) is not None:
+			absenceDoc = i
+		elif googleRe.search(i) is not None:
+			googleDoc = i
+
+	# Create full path by adding file name to the directory path.
+	absencePath = os.path.join(workDir, absenceDoc)
+	googlePath = os.path.join(workDir, googleDoc)
+	return googlePath, absencePath
+
+
+# Load xlsx document, requires doc address and sheet name, returne workbook and worksheet as a tuple.
 def load_data(address, sheet):
 	wb = openpyxl.load_workbook(address, data_only=True)
 	if sheet == None:
@@ -28,7 +47,7 @@ def load_data(address, sheet):
 	logging.debug(f'ws= {ws}')
 	return wb, ws
 
-# Counts number of cells until the first blank cell, returns the integer
+# Count number of cells until the first blank cell, return the integer
 def maximum_row(ws, key_column):
 	if type(key_column) == int:
 		key_column = get_column_letter(key_column)
@@ -40,7 +59,7 @@ def maximum_row(ws, key_column):
 			count +=1
 	return count
 
-# Removes diacritics, strips white space and removes interpunction, changes are made directly in the document.
+# Remove diacritics, strip white space and remove interpunction, changes are made directly in the document.
 def format_names(workSheet, col_num):
 	ws=workSheet
 	maxim = maximum_row (ws, col_num)
@@ -54,7 +73,7 @@ def format_names(workSheet, col_num):
 				cell.value = cell.value.strip()
 				cell.value = cell.value.translate(str.maketrans({'Č':'C','č':'c','Ć':'C','ć':'c','Š':'S','š':'s','Đ':'Dj','đ':'dj','Ž':'Z','ž':'z','.':''}))
 
-# Creates a list of two dictionaries, one for each dataset, returns a list.
+# Create a list of two dictionaries, one for each dataset, return a list.
 def create_dict_list(ws, key_column ,value_column):
 	first = {}
 	second = {}
@@ -65,14 +84,14 @@ def create_dict_list(ws, key_column ,value_column):
 			if cell.value == None: # Stop with the first blank cell
 				break
 			else:
-				index = value_column[i]+str(count) # Creates cell name by combining letter from the value column with the number from the >> i << counter
-				col_list[i][cell.value] = ws[index].value # Adds value to the dictionary from the cell on the position saved in >> index << 
+				index = value_column[i]+str(count) # Create cell name by combining letter from the value column with the number from the >> i << counter
+				col_list[i][cell.value] = ws[index].value # Add value to the dictionary from the cell on the position saved in >> index << 
 				count+=1
-		col_list.append # Appends the dictionary for a single dataset to the output-ready list
+		col_list.append # Append the dictionary for a single dataset to the output-ready list
 	logging.debug(f'col_list = \n{col_list}')
 	return col_list
 
-# Combines data from first name and last name columns, and fills column 'A' with the full name data.
+# Combine data from first name and last name columns, and fills column 'A' with the full name data.
 def construct_full_name(ws):
 	maxim= ws.max_row
 	firstNames = []
@@ -98,16 +117,16 @@ def construct_full_name(ws):
 			logging.debug(f'cell value {cell.value}')
 			c+=1
 
-# Generates list of keys based on the first document.
+# Generate a list of keys based on the first document.
 def get_key_list (first_list):
 	key_list = []
 	for keys in first_list[0]:
 		key_list.append(keys)
 	return key_list
 
-# Looks to find differences in the two datasets.
+# Find differences in the two datasets.
 def compare_columns(first_list, second_list, key_list):
-	with open('outputFile.txt','w') as outputFile: # Initiating the output file
+	with open('outputFile.txt','w') as outputFile: # Initiate the output file
 		c=1 # Numeration
 		for v in range(2): # Two datasets to compare
 			for i in key_list: # The keys should be the same in both datasets
@@ -130,8 +149,7 @@ def compare_columns(first_list, second_list, key_list):
 					outputFile.write(f"\n{c}) The key >>> {i} <<< exists only in one document.\nPlease ensure both documents have corresponding keys.\n\n")
 					c+=1
 
-FIRST_FILE_ADDRESS = varDepo.variables[0]['FIRST_FILE_ADDRESS']
-SECOND_FILE_ADDRESS = varDepo.variables[0]['SECOND_FILE_ADDRESS']
+
 KEY_COLUMN = varDepo.variables[0]['KEY_COLUMN'] # Has to be same for both documents
 
 # Both column letters need to be in the order of lookup.
@@ -141,17 +159,20 @@ SECOND_VALUE_COLUMN = varDepo.variables[0]['SECOND_VALUE_COLUMN']
 FIRST_LIST_DISPLAY_NAME=varDepo.variables[0]['FIRST_LIST_DISPLAY_NAME']
 SECOND_LIST_DISPLAY_NAME= varDepo.variables[0]['SECOND_LIST_DISPLAY_NAME']
 
+# Get addresses for the two xlsx docs
+google_doc,absence_doc = get_files_path()
+
 # First doc
-wb, ws = load_data(FIRST_FILE_ADDRESS, 'Employees') # Load the document.
+wb, ws = load_data(google_doc, 'Employees') # Load the document.
 format_names(ws, 1)	# Fix input errors for keys and standardise format.
-wb.save(FIRST_FILE_ADDRESS) # Save shanges in the document.
+wb.save(google_doc) # Save shanges in the document.
 first_list = create_dict_list(ws, KEY_COLUMN, FIRST_VALUE_COLUMN) # Extracts data in a list.
 
 # Second doc
-wb, ws = load_data(SECOND_FILE_ADDRESS, None) # Load the document.
+wb, ws = load_data(absence_doc, None) # Load the document.
 construct_full_name(ws) # Form full name from 'First name' and 'Last name' columns.
 format_names(ws, 1) # Fix input errors in keys and standardise format.
-wb.save(SECOND_FILE_ADDRESS) # Save changes to the document.
+wb.save(absence_doc) # Save changes to the document.
 second_list = create_dict_list(ws, KEY_COLUMN, SECOND_VALUE_COLUMN) # Extract data in a list.
 
 # Analysis
@@ -159,5 +180,5 @@ key_list= get_key_list(first_list) # Generate a list of keys.
 compare_columns(first_list, second_list, key_list) # Compare data sets and output findings.
 
 # Delete xlsx docs.
-send2trash.send2trash(FIRST_FILE_ADDRESS)
-send2trash.send2trash(SECOND_FILE_ADDRESS)
+send2trash.send2trash(google_doc)
+send2trash.send2trash(absence_doc)
