@@ -22,16 +22,15 @@ logging.disable(level=logging.CRITICAL)
 def get_files_path():
 	absenceRe = re.compile('^Allowance.*') # Create a regex expression using fixed part of the doc name.
 	googleRe = re.compile('^HR.*')
-	workDir = os.getcwd() # Find out current working directory path.
-	li = os.listdir() # Get list of names of the files in the current working directory.
+	workDir = os.path.dirname(__file__) # Find out the file directory path.
+	li = os.listdir(workDir) # Get list of names of the files in the file directory.
 	# Iter the file names to find the ones matching to the regex pattern.
 	for i in li:
 		if absenceRe.search(i) is not None:
 			absenceDoc = i
 		elif googleRe.search(i) is not None:
 			googleDoc = i
-		else:
-			continue
+
 	# Create full path by adding file name to the directory path.
 	absencePath = os.path.join(workDir, absenceDoc)
 	googlePath = os.path.join(workDir, googleDoc)
